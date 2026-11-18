@@ -32,11 +32,13 @@ Options:
 
 | Flag | Meaning |
 |---|---|
+| `--login` | Sign in with Pollinations in the browser (device code), then exit. |
+| `--logout` | Forget the token saved by `--login`. |
 | `--out DIR` | Output directory, created if missing. Default `out/postcard`. |
 | `--panels N` | Number of panels. Default 4. |
 | `--voice NAME` | Speech voice, default `nova`. |
 | `--seed N` | First image seed; later panels use `N+1`, `N+2`, … |
-| `--no-audio` | Skip narration even when a key is set. |
+| `--no-audio` | Skip narration even when signed in. |
 
 ## What it produces
 
@@ -51,15 +53,23 @@ out/jakarta/
 ## Requirements
 
 - Python 3.9+, standard library only. No install step.
-- `POLLINATIONS_API_KEY` (`sk_...`) for the planned panels and the narration.
-  Images work without a key through `image.pollinations.ai`, at one image
+- **Sign-in is optional and never asks for a key.** Run
+  `python3 scripts/postcard.py --login` once: the script prints a short code,
+  opens `enter.pollinations.ai/device`, you approve it there, and the token is
+  stored in `~/.config/pollinations-postcard/token.json` (mode 600). A key
+  already saved by `polli auth login` is reused as-is, and
+  `POLLINATIONS_API_KEY` still works for CI. Nothing is pasted into the skill.
+- Images work signed out too, through `image.pollinations.ai`, at one image
   every 45 seconds per IP. The script reads the limit's own retry hint and
-  waits, so a keyless four-panel card takes about three minutes.
+  waits, so a signed-out four-panel card takes about three minutes.
 
-Without a key the skill still runs: it plans the four panels locally from
-style suffixes, generates the images anonymously, skips narration and says so
-in the output. That fallback exists so the skill is useful before an account is
-set up, not to pretend the model calls happened.
+Signed out, the skill still runs: it plans the four panels locally from style
+suffixes, generates the images anonymously, skips narration and says so in the
+output. That fallback exists so the skill is useful before an account is set
+up, not to pretend the model calls happened.
+
+Sign-in scopes are `generate profile`: enough to plan, narrate and read the
+account name, and nothing that can create or rotate API keys.
 
 ## How it works
 

@@ -15,7 +15,7 @@ open out/jakarta/postcard.html
 out/jakarta/
   postcard.html   self-contained card, images and audio inlined
   panel-1.jpg     … the panels as files
-  narration.mp3   only when a key was available
+  narration.mp3   only when signed in
   manifest.json   brief, prompts, captions, models, seeds
 ```
 
@@ -36,24 +36,31 @@ Copy this directory into your agent's skills folder, or point the agent at
 `SKILL.md`. Nothing else is needed: the script is Python standard library only
 (3.9+), with no dependencies to install.
 
-## Key
+## Sign in (optional, no key to paste)
 
 Images work anonymously through `image.pollinations.ai`. Planning and narration
-need a key:
+need an account, so the skill signs in the Pollinations way:
 
 ```bash
-export POLLINATIONS_API_KEY=sk_...
+python3 scripts/postcard.py --login   # prints a code, opens enter.pollinations.ai/device
+python3 scripts/postcard.py --logout  # forget the stored token
 ```
 
-Every call spends that account's pollen, like any other Pollinations request.
-Overridable models: `POSTCARD_TEXT_MODEL`, `POSTCARD_SPEECH_MODEL`,
-`POSTCARD_IMAGE_MODEL`.
+Approve the code in the browser and the token is saved to
+`~/.config/pollinations-postcard/token.json` (mode 600). Nothing is pasted into
+the skill and no `sk_` key is needed. The script reuses a key already saved by
+`polli auth login`, and still honours `POLLINATIONS_API_KEY` for CI. Lookup
+order: postcard token, then polli credentials, then the environment variable.
+
+Scopes requested: `generate profile`. Every call spends that account's pollen,
+like any other Pollinations request. Overridable models: `POSTCARD_TEXT_MODEL`,
+`POSTCARD_SPEECH_MODEL`, `POSTCARD_IMAGE_MODEL`.
 
 ## Example
 
-`examples/jakarta-rain/` was generated without a key, so it shows the local
-plan, anonymous images and no narration. With a key the same command also
-writes `narration.mp3` and the captions come from the text model.
+`examples/jakarta-rain/` was generated signed out, so it shows the local plan,
+anonymous images and no narration. After `--login` the same command also writes
+`narration.mp3` and the captions come from the text model.
 
 ## Files
 

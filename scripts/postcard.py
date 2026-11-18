@@ -11,11 +11,21 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
 IMAGE_HOST = "https://image.pollinations.ai/prompt"
 API_HOST = "https://gen.pollinations.ai"
+ENTER_HOST = os.environ.get("POLLINATIONS_ENTER_URL", "https://enter.pollinations.ai")
+LOGIN_SCOPE = "generate profile"
+TOKEN_FILE = Path(
+    os.environ.get(
+        "POSTCARD_TOKEN_FILE",
+        Path.home() / ".config" / "pollinations-postcard" / "token.json",
+    )
+)
+POLLI_CREDENTIALS = Path.home() / ".pollinations" / "credentials.json"
 DEFAULT_TEXT_MODEL = os.environ.get("POSTCARD_TEXT_MODEL", "openai/gpt-5.4-nano")
 DEFAULT_SPEECH_MODEL = os.environ.get("POSTCARD_SPEECH_MODEL", "openai/tts-1")
 IMAGE_MODEL = os.environ.get("POSTCARD_IMAGE_MODEL", "").strip()
@@ -29,8 +39,113 @@ STYLES = [
 ]
 
 
+def now_iso():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def read_json_file(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 - a missing or malformed file means "no key"
+        return {}
+
+
+def stored_token():
+    return str(read_json_file(TOKEN_FILE).get("access_token") or "").strip()
+
+
+def polli_key():
+    """A key already stored by `polli auth login` (same device sign-in)."""
+    return str(read_json_file(POLLI_CREDENTIALS).get("apiKey") or "").strip()
+
+
 def api_key():
-    return os.environ.get("POLLINATIONS_API_KEY", "").strip()
+    """Sign-in first, environment second, so nobody has to paste an sk_ key."""
+    return (
+        stored_token()
+        or polli_key()
+        or os.environ.get("POLLINATIONS_API_KEY", "").strip()
+    )
+
+
+def key_source():
+    if stored_token():
+        return "signed in (postcard token)"
+    if polli_key():
+        return "signed in (polli)"
+    if os.environ.get("POLLINATIONS_API_KEY", "").strip():
+        return "POLLINATIONS_API_KEY"
+    return "anonymous"
+
+
+def post_json(url, payload, timeout=60):
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status, json.loads(response.read() or b"{}")
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", "replace")
+        try:
+            return error.code, json.loads(detail or "{}")
+        except json.JSONDecodeError:
+            return error.code, {"error": detail[:200]}
+
+
+def store_token(token):
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if TOKEN_FILE.parent.name == "pollinations-postcard":
+        try:
+            os.chmod(TOKEN_FILE.parent, 0o700)
+        except OSError:
+            pass
+    TOKEN_FILE.write_text(
+        json.dumps({"access_token": token, "saved_at": now_iso()}, indent=2),
+        encoding="utf-8",
+    )
+    try:
+        os.chmod(TOKEN_FILE, 0o600)
+    except OSError:
+        pass
+
+
+def login():
+    """Pollinations device sign-in: the browser approves, no key is pasted here."""
+    status, device = post_json(f"{ENTER_HOST}/api/device/code", {"scope": LOGIN_SCOPE})
+    if status != 200 or "device_code" not in device:
+        raise SystemExit(f"could not start sign-in: HTTP {status} {device}")
+    url = device.get("verification_uri_complete") or device.get("verification_uri")
+    interval = int(device.get("interval") or 5)
+    expires_in = int(device.get("expires_in") or 1800)
+    print(f"Your code: {device.get('user_code')}")
+    print(f"Approve it at: {url}")
+    webbrowser.open(url)
+    print("waiting for approval...")
+    deadline = time.time() + expires_in
+    while time.time() < deadline:
+        time.sleep(interval)
+        status, token = post_json(
+            f"{ENTER_HOST}/api/device/token",
+            {
+                "device_code": device["device_code"],
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+            },
+        )
+        if token.get("access_token"):
+            store_token(token["access_token"])
+            print(f"signed in: {TOKEN_FILE}")
+            return 0
+        error = token.get("error")
+        if error in (None, "authorization_pending", "slow_down"):
+            continue
+        raise SystemExit(
+            f"sign-in failed: {token.get('error_description') or error}"
+        )
+    raise SystemExit("sign-in timed out; run the script again")
 
 
 def retry_hint(detail):
@@ -227,7 +342,17 @@ __PANELS__
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("brief")
+    parser.add_argument("brief", nargs="?")
+    parser.add_argument(
+        "--login",
+        action="store_true",
+        help="sign in with Pollinations in the browser, then exit",
+    )
+    parser.add_argument(
+        "--logout",
+        action="store_true",
+        help="forget the token saved by --login, then exit",
+    )
     parser.add_argument("--out", default="out/postcard")
     parser.add_argument("--panels", type=int, default=4)
     parser.add_argument("--voice", default="nova")
@@ -240,12 +365,22 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.logout:
+        TOKEN_FILE.unlink(missing_ok=True)
+        print(f"signed out: removed {TOKEN_FILE}")
+        return 0
+    if args.login:
+        return login()
+    if not args.brief:
+        parser.error("a brief is required unless you pass --login or --logout")
+
     if not 1 <= args.panels <= 8:
         raise SystemExit("--panels must be 1..8")
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     key = api_key()
+    print(f"auth: {key_source()}")
 
     if key:
         try:
@@ -255,7 +390,7 @@ def main():
             print(f"plan: falling back to local panels ({error})")
             plan = plan_locally(args.brief, args.panels)
     else:
-        print("plan: local panels (no POLLINATIONS_API_KEY)")
+        print("plan: local panels (not signed in)")
         plan = plan_locally(args.brief, args.panels)
 
     image_paths = []
@@ -277,7 +412,7 @@ def main():
         audio_path.write_bytes(narrate(plan["narration"], args.voice, key))
         print(f"narration: {DEFAULT_SPEECH_MODEL} / {args.voice}")
     elif not key:
-        print("narration: skipped (needs POLLINATIONS_API_KEY)")
+        print("narration: skipped (run --login to sign in)")
 
     (out / "postcard.html").write_text(
         render(args.brief, plan, image_paths, audio_path), encoding="utf-8"
