@@ -28,6 +28,8 @@ TOKEN_FILE = Path(
 POLLI_CREDENTIALS = Path.home() / ".pollinations" / "credentials.json"
 DEFAULT_TEXT_MODEL = os.environ.get("POSTCARD_TEXT_MODEL", "openai/gpt-5.4-nano")
 DEFAULT_SPEECH_MODEL = os.environ.get("POSTCARD_SPEECH_MODEL", "openai/tts-1")
+# Both are paid_only:false on GET /v1/models, so a signed-in visitor can use either.
+SPEECH_FALLBACKS = ["microsoft/mai-voice-2.1"]
 IMAGE_MODEL = os.environ.get("POSTCARD_IMAGE_MODEL", "").strip()
 
 # Used when no key is set, or when the model's plan cannot be parsed.
@@ -250,17 +252,27 @@ def plan_with_model(brief, panels, key):
 
 
 def narrate(text, voice, key):
-    return fetch_json(
-        f"{API_HOST}/v1/audio/speech",
-        {
-            "model": DEFAULT_SPEECH_MODEL,
-            "input": text,
-            "voice": voice,
-            "response_format": "mp3",
-        },
-        key,
-        timeout=180,
-    )
+    """Speak the line, falling back to another free speech model if needed."""
+    last = None
+    for model in [DEFAULT_SPEECH_MODEL, *SPEECH_FALLBACKS]:
+        try:
+            audio = fetch_json(
+                f"{API_HOST}/v1/audio/speech",
+                {
+                    "model": model,
+                    "input": text,
+                    "voice": voice,
+                    "response_format": "mp3",
+                },
+                key,
+                timeout=180,
+            )
+        except Exception as error:  # noqa: BLE001 - try the next free model
+            last = error
+            print(f"  speech: {model} failed ({error})")
+            continue
+        return model, audio
+    raise SystemExit(f"narration failed: {last}")
 
 
 def data_uri(path, mime):
@@ -407,10 +419,12 @@ def main():
         image_paths.append(target)
 
     audio_path = None
+    narration_model = None
     if key and not args.no_audio:
+        narration_model, audio = narrate(plan["narration"], args.voice, key)
         audio_path = out / "narration.mp3"
-        audio_path.write_bytes(narrate(plan["narration"], args.voice, key))
-        print(f"narration: {DEFAULT_SPEECH_MODEL} / {args.voice}")
+        audio_path.write_bytes(audio)
+        print(f"narration: {narration_model} / {args.voice}")
     elif not key:
         print("narration: skipped (run --login to sign in)")
 
@@ -422,7 +436,7 @@ def main():
             {
                 "brief": args.brief,
                 "planned_by": DEFAULT_TEXT_MODEL if key else "local",
-                "speech_model": DEFAULT_SPEECH_MODEL if audio_path else None,
+                "speech_model": narration_model,
                 "image_model": IMAGE_MODEL or "endpoint default",
                 "seed": args.seed,
                 **plan,
