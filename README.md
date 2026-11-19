@@ -58,9 +58,11 @@ like any other Pollinations request. Overridable models: `POSTCARD_TEXT_MODEL`,
 
 ## Example
 
-`examples/jakarta-rain/` was generated signed out, so it shows the local plan,
-anonymous images and no narration. After `--login` the same command also writes
-`narration.mp3` and the captions come from the text model.
+`examples/jakarta-rain/` is a real run of the whole pipeline: `openai/gpt-5.4-nano`
+wrote the four prompts, captions and the narration line, the image endpoint drew
+the panels anonymously (so the script waited out the 45 s/IP limit), and
+`openai/tts-1` spoke the line into `narration.mp3` with the polli sign-in already
+on disk. `manifest.json` records the models, prompts and seeds.
 
 ## Files
 

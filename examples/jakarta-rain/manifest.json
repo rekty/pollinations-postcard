@@ -1,26 +1,26 @@
 {
-  "brief": "a rainy night in Jakarta",
-  "planned_by": "local",
-  "speech_model": null,
+  "brief": "a rainy night in Jakarta, neon signs on wet asphalt, motorbikes passing",
+  "planned_by": "openai/gpt-5.4-nano",
+  "speech_model": "openai/tts-1",
   "image_model": "endpoint default",
   "seed": 7,
   "panels": [
     {
-      "prompt": "a rainy night in Jakarta, wide establishing shot, morning light",
-      "caption": "the way in"
+      "prompt": "Rainy night in Jakarta, neon reflections shimmering on wet asphalt, several motorbikes streak past with visible motion blur, distant buildings with scattered window lights, light fog",
+      "caption": "jakarta neon rain"
     },
     {
-      "prompt": "a rainy night in Jakarta, close-up detail, shallow depth of field",
-      "caption": "what you noticed"
+      "prompt": "Close view at street level, wet road texture with puddles reflecting red and cyan neon signage, a rider in a helmet foregrounded, headlights diffused by rain",
+      "caption": "headlights in puddles"
     },
     {
-      "prompt": "a rainy night in Jakarta, shot from the street, people passing",
-      "caption": "the noise of it"
+      "prompt": "Wider street corner scene, neon storefront signs and overhead wiring, motorbike queue crossing under a streetlight halo, raindrops streak diagonally, crowd silhouettes",
+      "caption": "streetlight halo"
     },
     {
-      "prompt": "a rainy night in Jakarta, last light of the day, long shadows",
-      "caption": "the way out"
+      "prompt": "Night after a brief shower, puddle splashes frozen by shutter timing, neon sign glow ripples across water, occasional passing bike as light trails, moody cinematic atmosphere",
+      "caption": "ripples of neon"
     }
   ],
-  "narration": "A postcard from a rainy night in Jakarta."
+  "narration": "Motorbikes cut through Jakarta\u2019s neon rain, their reflections shimmering on the wet streets."
 }
